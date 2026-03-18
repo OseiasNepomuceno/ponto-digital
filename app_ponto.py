@@ -4,49 +4,63 @@ import pandas as pd
 from datetime import datetime
 from geopy.geocoders import Nominatim
 
-# 1. Configuração de Conexão (Usa os Secrets que você salvou)
+# --- 1. CONFIGURAÇÕES E BANCO DE DADOS (TOP LEVEL) ---
+# Movido para o topo para evitar o NameError
+funcionarios = {
+    "123": "Oseias Nepomuceno", 
+    "456": "João Silva",
+    "789": "Maria Oliveira"
+}
+
+# Conexão com o Google Sheets (Secrets)
 conn = st.connection("gsheets", type=GSheetsConnection)
 geolocator = Nominatim(user_agent="ponto_digital_oseias")
 
 st.title("📸 Ponto Digital Facial - Cloud")
 
-# --- Interface de Login na Sidebar ---
-st.sidebar.title("🔐 Login")
-matricula = st.sidebar.text_input("Matrícula:")
-funcionarios = {"123": "Oseias Nepomuceno", "456": "João Silva"} # Exemplo
+# --- 2. INTERFACE DE LOGIN NA SIDEBAR ---
+st.sidebar.title("🔐 Login do Colaborador")
+matricula = st.sidebar.text_input("Digite sua Matrícula ou CPF:")
 
+# --- 3. LÓGICA PRINCIPAL ---
 if matricula in funcionarios:
     nome_usuario = funcionarios[matricula]
     st.sidebar.success(f"Conectado: {nome_usuario}")
 
-    # --- Captura da Foto ---
-    foto = st.camera_input("Tire a selfie para o ponto")
+    # Interface de Batida de Ponto
+    st.info(f"Olá, **{nome_usuario}**. Posicione-se para a foto.")
+    foto = st.camera_input("Capture sua imagem")
 
     if foto:
-        tipo = st.selectbox("Tipo:", ["Entrada", "Saída Almoço", "Retorno Almoço", "Saída"])
+        tipo = st.selectbox("Selecione o Tipo de Registro:", 
+                            ["Entrada", "Saída Almoço", "Retorno Almoço", "Saída Final"])
         
-        if st.button("Confirmar Registro"):
-            # 2. Preparar os Dados
-            agora = datetime.now()
-            novo_registro = pd.DataFrame([{
-                "Data": agora.strftime("%d/%m/%Y"),
-                "Hora": agora.strftime("%H:%M:%S"),
-                "Funcionario": nome_usuario,
-                "Tipo": tipo,
-                "Localizacao": "Sao Paulo - SP" # Aqui depois integraremos o GPS real
-            }])
+        if st.button("Confirmar Registro no Sistema"):
+            with st.spinner('Enviando dados para o Google Sheets...'):
+                agora = datetime.now()
+                
+                # Criar o DataFrame com o novo registro
+                novo_registro = pd.DataFrame([{
+                    "Data": agora.strftime("%d/%m/%Y"),
+                    "Hora": agora.strftime("%H:%M:%S"),
+                    "Funcionario": nome_usuario,
+                    "Tipo": tipo,
+                    "Localizacao": "Localização via Navegador" # Placeholder para o GPS
+                }])
 
-            try:
-                # 3. Ler dados atuais e enviar novos (O pulo do gato!)
-                # ttl=0 garante que ele não use "cache" e pegue a planilha sempre atualizada
-                dados_atuais = conn.read(worksheet="Página1", ttl=0)
-                dados_finais = pd.concat([dados_atuais, novo_registro], ignore_index=True)
-                
-                conn.update(worksheet="Página1", data=dados_finais)
-                
-                st.balloons()
-                st.success(f"✅ Ponto de {tipo} gravado no Google Sheets!")
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
+                try:
+                    # Lógica de atualização da planilha
+                    dados_atuais = conn.read(worksheet="Página1", ttl=0)
+                    dados_finais = pd.concat([dados_atuais, novo_registro], ignore_index=True)
+                    
+                    # Enviar para o Google
+                    conn.update(worksheet="Página1", data=dados_finais)
+                    
+                    st.balloons()
+                    st.success(f"✅ Sucesso! Ponto de {tipo} gravado às {agora.strftime('%H:%M:%S')}")
+                except Exception as e:
+                    st.error(f"Erro na conexão com a planilha: {e}")
 else:
-    st.info("Aguardando login para liberar a câmera...")
+    if matricula:
+        st.sidebar.warning("Matrícula não reconhecida.")
+    st.info("Aguardando identificação na barra lateral para liberar a câmera.")
