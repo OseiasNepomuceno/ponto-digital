@@ -3,3 +3,4 @@ opencv-python-headless
 pandas
 numpy
 geopy
+st-gsheets-connection
